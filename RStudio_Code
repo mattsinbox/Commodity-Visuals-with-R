@@ -1,0 +1,442 @@
+---
+title: "SUGAR PRICE VOLATILITY"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE,
+                      fig.width = 9, fig.height = 5, fig.path='Figs/', 
+                      fig.align='center', tidy = TRUE, 
+                      ECHO=FALSE, WARNING=FALSE, message=FALSE)
+options(scipen = 999)
+```
+
+```{r}
+options(repos="https://cran.rstudio.com" )
+```
+
+#Sugar Price Volatility
+by Matthew Aronowitz
+
+##Abstract
+Sugar is one of the most heavily traded commodity in the world.  Since the price of sugar is relatively small compared with the finished good, the volatility of this commodity is usually ignored.  That being said, in percentage terms, sugar prices are quite volatile.  In a given year, it is not uncommon to see prices moves of 30% or more.  In this analysis we are going to look at the prices of daily sugar futures contracts traded on The ICE Exchange from 2010-2018.  The goal of this exploratory data analysis is to determine if certain variables could help predict future volatility of this commodity.  
+
+##Dataset and Preperations, Remove NA's
+
+```{r echo=FALSE}
+# read in file
+
+sb <- read.csv('Udacity_Sugar.csv', stringsAsFactors = FALSE)
+```
+
+```{r echo=FALSE}
+# set date format as numeric and check classes
+sb$date <- as.Date(sb$date, format="%m/%d/%Y")
+sb$volume <- as.numeric(as.integer(sb$volume))
+sapply(sb, class)
+```
+
+
+
+
+
+
+##Summary of Data Set
+For each day we get the "date", opening price of that day "open", high price of that day "high", low price of that day "low" and closing price of that day "close".  The "move" is the percent change from previous day's close to the current day's close.  The "move" could be positive (sugar prices go up) or the "move" could be negative (sugar price went down).  The "max_range" represents the maximum movement in absolute terms from the previous day's close to either that day's high or low price.  The "close_range" is the absolute value of the "move".  The "average" variable represents the mean of the "close_range" and "max_range".  
+
+The "fut_vol" is the 20 day forward mean of the "average" variable, then translated into a yearly volatility percentage.  This represents the 20 day future volatility of the commodity.  The "fut_vol" is the variable we would like to predict as it represents the future volatility of sugar at that moment in time.  
+
+
+
+All these prices are in cents per pound or .01/lb, so a value of 12.95 is 12.95 cents per pound.  
+
+
+##First Look Into The Volatility of the Sugar Prices
+Lets look at a summary of our average daily volatility "average"
+
+```{r echo=FALSE}
+#summary of means for the average column
+
+summary(sb$average)
+
+```
+Looking at the summary, it seems some of the averages could be bad data as it seems extreme.  It could be a result of when the data changes futures contract of reference.  Lets subset the data and exclude any "average" above 5% and take a look at the distribution.  The "average"" is a good representation of the daily volatility.  
+
+
+```{r echo=FALSE}
+# read in ggplot 
+# plot histogram of average column
+
+library(ggplot2)
+new_sb = subset(sb, average < .05)
+qplot(x = average, data = new_sb)
+```
+
+
+
+The data definetely looks skewed, which is probably why the options prices usually prices in a skew when looking at the prices in terms of volatility.  Lets see if the volatility and skew is more apparent on up days versus down days.  Is there more volatility on days when sugar prices go down versus when prices go up.  
+
+
+```{r echo=FALSE}
+
+#Read in gridextra
+library(gridExtra)
+#subset data where move is greater than 0 and less than 0
+higher = subset(new_sb, move > 0)
+lower = subset(new_sb, move < 0)
+
+
+#  set variable to histogram of average column for subset move greater than 0 
+p1 <- qplot(x = average, data = higher) + 
+  labs (title = "Sugar Higher", x = "Volatility", y = "Days") + 
+  geom_vline(xintercept = mean(higher$average), color = "red")
+
+#  set variable to histogram of average column for subset move less than 0 
+p2 <- qplot(x = average, data = lower) + 
+  labs (title = "Sugar Lower", x = "Volatility", y = "Days") + 
+  geom_vline(xintercept = mean(lower$average), color = "red")
+
+# set the grid of p1 and p2 
+grid.arrange(p1, p2, ncol=1)
+
+```
+
+
+The red lines represent the mean of the averages.  It seems that when sugar goes higher, it is more volatile with a higher average.  It also seems to have more skew.  Curious if over a more current period, it is still more volatile to the upside than the downside.  
+
+
+```{r echo=FALSE} 
+
+# subset data so current periods only includes dates in 2018
+current_period_higher = subset(new_sb, date > "2018-01-01" & move > 0)
+current_period_lower = subset(new_sb, date > "2018-01-01" & move < 0)
+
+#check how many rows are in this data set
+nrow(current_period_higher)
+nrow(current_period_lower)
+
+
+#  set variable to histogram of average column for subset move greater than 0 
+p3 <- qplot(x = average, data = current_period_higher) + 
+  labs (title = "Sugar Higher", x = "Volatility", y = "Days") + 
+  geom_vline(xintercept = mean(current_period_higher$average), color = "red")
+
+
+#  set variable to histogram of average column for subset move less than 0 
+p4 <- qplot(x = average, data = current_period_lower) + 
+  labs (title = "Sugar Lower", x = "Volatility", y = "Days") + 
+  geom_vline(xintercept = mean(current_period_lower$average), color = "red")
+
+# set grid of p3 and p4
+grid.arrange(p3, p4, ncol=1)
+```
+
+
+It seems that in the current year, sugar prices continue to be more volatile on averagewhen the market rises.  
+In addition, the distribution is also more skewed to the right.   
+
+
+##Let's Examine the Potential Impact of Volume on Sugar Price Volatility
+
+```{r echo=FALSE}
+
+# run correlation on volume and fut_vol
+cor.test(new_sb$fut_vol, new_sb$volume, method = 'pearson')
+
+# scatter plot of fut_vol and volume
+ggplot(aes(x = volume, y = fut_vol), data = new_sb) + geom_point() + 
+  stat_smooth(method = 'lm')
+```
+
+
+
+Initial indication is that there is no correlation or relationship in future volatility and volume.  Maybe if we smoothed the volume data by creating a new column which has the moving average of the volume.  
+
+```{r echo=FALSE}
+library(TTR)
+#Lets re-sort the data to work with the SMA and EMA functions as the oldest dates need to be first
+
+new_sb_reverse <- new_sb[nrow(new_sb):1,]
+
+#Let's create a new column for the 10 day moving average 
+
+new_sb_reverse$ma_volume <- SMA(new_sb_reverse$volume, 5)
+
+```
+Lets run a scatter plot of the new smoother volume variable against fut_vol and see if there is any correlation.  
+
+```{r echo=FALSE}
+# run correlation
+cor.test(new_sb_reverse$fut_vol, new_sb_reverse$ma_volume, method = 'pearson')
+
+# run scatter of moving average of volume and fut_vol
+ggplot(aes(x = ma_volume, y = fut_vol), data = new_sb_reverse) + 
+  geom_point() + 
+  stat_smooth(method = 'lm')
+```
+
+
+At first glance it does not seem like there is much correlation or relationship between volume and future volatility.  Some of these fut_vols seem extreme and might.  Lets remove some of the more extreme fut_vol data, those above 40 and re-draw the relationship.  
+
+```{r echo=FALSE} 
+
+# subset data with fut_vol under 40
+new_sb_lower_fut_vol = subset(new_sb_reverse, fut_vol < 40)
+# run correlation with new data set
+cor.test(new_sb_lower_fut_vol$fut_vol, new_sb_lower_fut_vol$ma_volume, method = 'pearson')
+# run scatter plot of moving average and future vol 
+ggplot(aes(x = ma_volume, y = fut_vol), data = new_sb_lower_fut_vol) + geom_point() + 
+  stat_smooth(method = 'lm')
+
+```
+
+
+Here it shows a positive relationship - so maybe, volumes could be a predictor of fut_vol.  Lets create categorical categories by bucketing the fut_vol and volumes so we can quantify some of the relationships between variables.  
+
+##Fut_Vol Buckets and Volumes
+Set Fut_vol buckets
+
+```{r echo=FALSE}
+#create new variable from fut_vol buckets
+
+new_sb_lower_fut_vol$fut_vol_bucket <- cut(new_sb_lower_fut_vol$fut_vol, c(9, 15, 20, 25, 30, 35, 40))
+
+```
+
+
+
+```{r echo=FALSE}
+# histogram of moving average volumes, facet wrap by fut_vol buckets
+ggplot(aes(x = ma_volume), data = new_sb_lower_fut_vol) + 
+  geom_histogram() + 
+  facet_wrap(~fut_vol_bucket) + 
+  scale_fill_brewer(type = 'qual')
+```
+
+```{r echo=FALSE}
+#table of moving average volumes against fut_vol_buckets by standard deviations
+
+tapply(new_sb_lower_fut_vol$ma_volume, new_sb_lower_fut_vol$fut_vol_bucket, sd)
+```
+```{r echo=FALSE} 
+
+#table of moving average volumes against fut_vol_buckets by standard deviations
+tapply(new_sb_lower_fut_vol$ma_volume, new_sb_lower_fut_vol$fut_vol_bucket, mean)
+```
+
+As we can see, higher volatility buckets are associated with higher rolling means.  There are less instances of higher volatilities but the central tendency or mean is higher and more skewed to the right.  That being said, the standard deviation of the rolling mean volumes are quite large and therefore this variable by itself might not be statistically significant to predict future volatility.  
+
+Lets look at this relationship over time and see if that central tendency of higher median volumes being associated with higher fut_vols is consistent over time.   
+
+
+```{r echo=FALSE}
+#line graph of fut_vol buckets over time and moving average volumes
+
+ggplot(aes(x = date, y = ma_volume ), data = new_sb_lower_fut_vol) +
+  geom_line(aes(color=fut_vol_bucket),stat = 'summary', fun.y=median)
+```
+
+It looks like this chart is all over the place.  Cannot determine any clear trend over time with respect to fut_vol and volumes.  Maybe it would be more clear if we bucket the rolling_averages.  
+
+Lets create a new categorical variable of volume buckets and look at the range of ma_volumes.  
+
+Now lets create the buckets and summarize that data.  
+```{r echo=FALSE}
+
+#create new volume bucket variable
+new_sb_lower_fut_vol$volume_bucket <- cut(new_sb_lower_fut_vol$ma_volume, 3, include.lowest = TRUE, labels=c("Low", "Medium", "High"))
+
+#table of volume_bucket
+table(new_sb_lower_fut_vol$volume_bucket)
+
+```
+Lets graph this new variable as lines over time against fut_vol.  
+
+
+```{r echo=FALSE} 
+
+#line graph of fut_vol over time with median values
+ggplot(aes(x = date, y = fut_vol ), data = new_sb_lower_fut_vol) +
+  geom_line(aes(color=volume_bucket),stat = 'summary', fun.y=median)
+
+```
+
+
+It is hard from this graph to see any real trend over time with respect to volumes.  It seems that higher fut_vol are associated with higher volume means but we are unsure of this relationship over time.  
+
+
+
+
+
+
+```{r echo=FALSE}
+#box plot of volume_buckets against fut_vol
+
+qplot(x = volume_bucket, y = fut_vol, data = new_sb_lower_fut_vol, geom = 'boxplot')
+```
+
+
+Here you can see clearer that higher volume  are associated with higher future volatility.  Conversely, lower volumes are associated with lower volatilities.   
+
+##Past Predicting the Future
+In finance, we often look at the past to predict the future.  Lets look to see if past volatility could be a good predictor of future volatility.  
+
+Averages represent sugar's daily volatility.  Lets create a new variable which is the 20 day rolling mean of the average variable. 
+
+```{r echo=FALSE}
+
+#create new column variable that is the rolling 20 day mean of the averages to represent the historical vol  
+new_sb_lower_fut_vol$hist_vol <- SMA(new_sb_lower_fut_vol$average, 20)
+```
+
+Let's look at a scatter plot and correlation of this variable against fut_vol.  
+
+
+```{r echo=FALSE}
+#correlation of fut_vol against hist_vol
+cor.test(new_sb_lower_fut_vol$fut_vol, new_sb_lower_fut_vol$hist_vol, method = 'pearson')
+
+#scatter plot of fut_vol against hist_vol
+ggplot(aes(x = hist_vol, y = fut_vol), data = new_sb_lower_fut_vol) + geom_point() + 
+  stat_smooth(method = 'lm')
+```
+
+
+So, there seems to be a relatively large, positive relationship between historical volatility and future volatility.  This historical volatility might be a good predictor of future volatility.   
+
+Lets look at the historical volatility means across fut_vol buckets 
+
+```{r echo=FALSE} 
+
+#table of means for hist_vol against fut_vol
+tapply(new_sb_lower_fut_vol$hist_vol, new_sb_lower_fut_vol$fut_vol_bucket, mean)
+```
+Let's bucket the historical volatility and graph a box plot of fut_vol 
+
+```{r echo=FALSE} 
+#create hist_bucket
+new_sb_lower_fut_vol$hist_bucket <- cut(new_sb_lower_fut_vol$hist_vol, 5, include.lowest = TRUE, labels=c("Lowest_Hist", "Low_Hist", "Medium_Hist", "High_Hist", "Highest_Hist"))
+```
+```{r echo=FALSE} 
+#box plot of hist_vol and fut_vol
+qplot(x = hist_bucket, y = fut_vol, data = new_sb_lower_fut_vol, geom = 'boxplot')
+```
+
+Here we can clearly see that the higher the historical volatility, the higher the central tendencies of the future volatility.  
+
+
+##Liquidity as a Predictor of Future Volatility
+
+Curious if liquidity could predict future volatility.  We can define liquidity as volume / average.  It represents how much volume it takes to move prices.  Lower liquidity should lead to more volatility, everything else being equal.  Therefore liquidity should have a negative correlation with future volatility.  
+
+Lets create a new variable, liquidity
+```{r echo=FALSE}
+# new variable for liquidity
+new_sb_lower_fut_vol$liquidity <- new_sb_lower_fut_vol$volume / (new_sb_lower_fut_vol$average * 100) 
+```
+
+Let's calculate the correlation and graph the scatter plot of this variable against fut_vol.  
+
+```{r echo=FALSE}
+#correlation of fut_vol and liquidity
+cor.test(new_sb_lower_fut_vol$fut_vol, new_sb_lower_fut_vol$liquidity, method = 'pearson')
+
+#scatter plot of liquidity and fut_vol
+ggplot(aes(x = liquidity, y = fut_vol), data = new_sb_lower_fut_vol) + geom_point() + 
+  stat_smooth(method = 'lm')
+```
+
+
+There seems to be a negative relationship between liquidity and fut_vol.  With a correlation of just .19, we are unsure how strong that relationship would be in predicting future vol.  Volume has a similar correlation with fut_vol and is simpler to define than liquidity.  
+
+```{r echo=FALSE}
+#scatter of liquidity and fut_vol, colored by hist_bucket
+ggplot(aes(x = liquidity, y = fut_vol), data = new_sb_lower_fut_vol) + 
+  geom_point(aes(color = hist_bucket)) +
+  scale_fill_brewer(type='qual') + geom_hline(yintercept = mean(new_sb_lower_fut_vol$fut_vol), color = "red", linetype = "dotted") + labs (title = "Liquidity", x = "Liquidity", y = "Future Volatility")
+```
+
+
+##Historical Volatility and Volume as a Predictor of Future Volatility
+Let's look at some graphs that show both of these variables
+
+```{r echo=FALSE}
+
+#histogram of hist_vol, with volume bucket as fill, facet by fut_vol bucket
+ggplot(aes(x = hist_vol, fill = volume_bucket), data = new_sb_lower_fut_vol) + 
+  geom_histogram() + 
+  facet_wrap(~fut_vol_bucket) + 
+  scale_fill_brewer(type = 'qual') 
+
+```
+
+```{r echo=FALSE}
+
+#scatter of hist_vol against fut_vol, colored by volume_bucket
+ggplot(aes(x = hist_vol, y = fut_vol), data = new_sb_lower_fut_vol) +
+  geom_point(aes(color = volume_bucket)) +
+  scale_fill_brewer(type='qual') 
+```
+
+Most of the red and green in lower left and most of purple and blue in upper half.   
+
+
+```{r echo=FALSE} 
+library(dplyr)
+
+# new subset using group by fut_vol_buckets and volume buckets
+speed <- group_by(new_sb_lower_fut_vol, fut_vol_bucket, volume_bucket)
+
+# summary table of fut_vol and volume buckets by mean and median hist_vols
+summarise(speed, hist_vol = mean(hist_vol), hist_med = median(hist_vol), n = n())
+
+```
+This summarise table breaks down the information in the multivariable plot, shown above.  
+
+##Final Plots and Summary
+```{r echo=FALSE}
+#scatter plot of hist_vol by fut_vol, colored by volume_bucket
+ggplot(aes(x = hist_vol, y = fut_vol), data = new_sb_lower_fut_vol) +
+  geom_point(aes(color = volume_bucket)) +
+  scale_fill_brewer(type='qual') + 
+  geom_hline(yintercept = mean(new_sb_lower_fut_vol$fut_vol), color = "red", linetype = "dotted") + 
+  labs (title = "Sugar Volatility by Volume and Historical", x = "Historical Volatility", y = "Future Volatility")
+
+```
+Sugar Volatility by Volume and Historical plot is a scatter of the historical volatility and future volatility with the scatter plots colored by volume.  The y dotted line drawn is the mean future volatility.  This graph shows the upward slope and positive correlation between historical volatility and future volatility.  This indicates that the two is related and therefore historical volatility is probably useful in predicting future volatility.  The colored dots indicate that volume could further enhance the predictive power of future volatility.  Most of the blue dots, indicating high volume sit above the mean value of future volatility.  When they sit below the dotted line, they are usually to the left of the center.  This shows that when historical volatilities are around the center, higher volumes, could indicate that sugar is entering a period of above average volatility.  That being said, I do not think medium and low volumes send as strong of a signal of future volatility (or lack thereof) as historical volatility.  It seems that in cases of low to medium volumes, the more relevant signal is historical volatility and the volumes do not seem to help predict future volatility.  
+
+
+```{r echo=FALSE}
+
+# setting variables for box plot for hist_buckets against fut_vol 
+p10 <- qplot(x = hist_bucket, y = fut_vol, data = new_sb_lower_fut_vol, geom = 'boxplot') + 
+  labs (title = "History Repeats", x = "Historical Volatility", y = "Future Volatility")
+# setting variables for box plot for volume_buckets against fut_vol
+p11 <- qplot(x = volume_bucket, y = fut_vol, data = new_sb_lower_fut_vol, geom = 'boxplot') + 
+  labs (title = "Volumes of Sugar", x = "Volume", y = "Future Volatility")
+
+#set grid
+grid.arrange(p10, p11, ncol=1)
+```
+
+
+With these boxplots, we can see that as historical volatility and volume increase so do their central tendencies in relation to future volatility.  That being said, in this comparison, the differences in central tendencies seem larger for historical volatility.  This is another confirmation that historic volatility is the better variable in predicting future volatility.   
+
+
+```{r echo=FALSE} 
+# subset with hist_vol lower than 1%
+lower_hist = subset(new_sb_lower_fut_vol, hist_vol < .01)
+
+#scatter of lower_hist subset by liquidity and fut_vol
+ggplot(aes(x = liquidity, y = fut_vol), data = lower_hist) + geom_point() + 
+  stat_smooth(method = 'lm') + labs (title = "Sugar Liquidity", x = "Liquidity", y = "Future Volatility")
+
+```
+
+One of the things I noticed in the "Liquidty" section is that when I plotted the scatter and colored the dots by the historical volatility buckets, it looked like the correlation of the red (lowest historical volatility)  was positive.  Here I created a scatter and subset the data with the lowest historical volatility.  As you can see, the data takes on a completely different shape when it includes only the lowest historical volatilities.  It is suprising to see that as sugar prices are presenting low historical volatilities, MORE liquidity lead to higher volatilities.
+
+##Reflection
+History seems to repeat itself but do not be lulled into sleep with low sugar trading volumes.  In this data set sugar historical price volatilties show the strongest relationship to future sugar price volatility.  Larger volumes could be another good indicator of future sugar price volatility but do not assume that lower volumes lead to lower future volatilities especially when they are accompanied by periods of high historical volatilities.  In these instances, the sugar market could be taking a collective trading pause only to resume its historical trend.      
